@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pusoy Dos - Meta Ray-Ban HUD</title>
+    
+    <!-- Tailwind CSS for rapid HUD styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Wearable HUD Optimizations */
+        body { 
+            background-color: #000000; /* Renders transparent on waveguide displays */
+            color: #ffffff; 
+            overflow: hidden; 
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            touch-action: none; /* Prevents zooming on cap-touch */
+        }
+        
+        /* Simulated Display Viewport (approximate MRBD field of view) */
+        #mrbd-viewport {
+            width: 100vw; 
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at center, #064e3b 0%, #000000 80%); /* Green Table effect */
+        }
+
+        /* Hide Scrollbars for Neural Band swipe interfaces */
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .card-selected {
+            transform: translateY(-10px);
+            box-shadow: 0 0 15px 2px #4ade80;
+            border-color: #4ade80;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        // --- PUSOY DOS ENGINE ---
+        // Suits: 0: ♣ (Clubs), 1: ♠ (Spades), 2: ♥ (Hearts), 3: ♦ (Diamonds)
+        // Ranks: 3=3, ..., 10=10, 11=J, 12=Q, 13=K, 14=A, 15=2
+        class Card {
+            constructor(rank, suit) {
+                this.rank = rank;
+                this.suit = suit;
+                this.value = rank * 10 + suit; 
+                const suits = ['♣', '♠', '♥', '♦'];
+                const ranks = {11:'J', 12:'Q', 13:'K', 14:'A', 15:'2'};
+                this.label = (ranks[rank] || rank) + suits[suit];
+                this.isRed = suit === 2 || suit === 3;
+            }
+        }
+
+        const createDeck = () => {
+            let deck = [];
+            for (let r = 3; r <= 15; r++) {
+                for (let s = 0; s <= 3; s++) deck.push(new Card(r, s));
+            }
+            return deck.sort(() => Math.random() - 0.5);
+        };
+
+        const getCombos = (hand, size) => {
+            let counts = {};
+            hand.forEach(c => { counts[c.rank] = counts[c.rank] || []; counts[c.rank].push(c); });
+            let combos = [];
+            Object.values(counts).forEach(group => {
+                if(group.length >= size) combos.push(group.slice(0, size));
+            });
+            return combos.sort((a, b) => a[a.length-1].value - b[b.length-1].value);
+        };
+
+        const getValidPlays = (hand, currentTable) => {
+            if (currentTable.length === 0) {
+                // Free turn: can play any single, pair, or triple
+                return [
+                    ...hand.map(c => [c]),
+                    ...getCombos(hand, 2),
+                    ...getCombos(hand, 3)
+                ];
+            }
+            
+            const reqSize = currentTable.length;
+            const tableHighValue = currentTable[currentTable.length - 1].value;
+            
+            if (reqSize === 1) return hand.filter(c => c.value > tableHighValue).map(c => [c]);
+            
+            return getCombos(hand, reqSize).filter(combo => combo[combo.length-1].value > tableHighValue);
+        };
+
+        // --- REACT APP ---
+        const App = () => {
+            const [gameState, setGameState] = useState('MENU'); // MENU, PLAYING, GAMEOVER
+            const [difficulty, setDifficulty] = useState('NORMAL');
+            const [hands, setHands] = useState([[], [], [], []]); // 0: User, 1-3: AI
+            const [table, setTable] = useState([]);
+            const [turn, setTurn] = useState(0);
+            const [lastPlayedTurn, setLastPlayedTurn] = useState(-1);
+            const [selectedCards, setSelectedCards] = useState([]);
+            const [logs, setLogs] = useState("Awaiting command...");
+
+            // Initialize Game
+            const startGame = (diff) => {
+                const deck = createDeck();
+                const newHands = [deck.slice(0,13), deck.slice(13,26), deck.slice(26,39), deck.slice(39,52)];
+                newHands.forEach(h => h.sort((a,b) => a.value - b.value));
+                
+                // Find who has 3 of Clubs (value 30)
+                let startingPlayer = newHands.findIndex(h => h.some(c => c.value === 30));
+                
+                setDifficulty(diff);
+                setHands(newHands);
+                setTable([]);
+                setTurn(startingPlayer);
+                setLastPlayedTurn(startingPlayer);
+                setGameState('PLAYING');
+                setLogs(`Player ${startingPlayer === 0 ? 'You' : startingPlayer} starts (holds 3♣)`);
+            };
+
+            // Process End of Turn Logic
+            const nextTurn = (playedCards, playerIdx) => {
+                if (playedCards) {
+                    setTable(playedCards);
+                    setLastPlayedTurn(playerIdx);
+                    
+                    // Remove cards from player's hand
+                    const newHands = [...hands];
+                    newHands[playerIdx] = newHands[playerIdx].filter(c => !playedCards.includes(c));
+                    setHands(newHands);
+
+                    if (newHands[playerIdx].length === 0) {
+                        setGameState('GAMEOVER');
+                        setLogs(playerIdx === 0 ? "🏆 YOU WIN!" : `💀 AI ${playerIdx} WINS!`);
+                        return;
+                    }
+                }
+
+                // Calculate next turn
+                let nextIdx = (playerIdx + 1) % 4;
+                if (nextIdx === lastPlayedTurn && !playedCards) {
+                    // Everyone passed, table clears, last player gets free turn
+                    setTable([]);
+                    setLogs(`Table cleared. P${lastPlayedTurn}'s free turn.`);
+                }
+                
+                setSelectedCards([]);
+                setTurn(nextIdx);
+            };
+
+            // AI Logic Hook
+            useEffect(() => {
+                if (gameState !== 'PLAYING' || turn === 0) return;
+
+                const timer = setTimeout(() => {
+                    const aiHand = hands[turn];
+                    const isFreeTurn = lastPlayedTurn === turn || table.length === 0;
+                    const validPlays = getValidPlays(aiHand, isFreeTurn ? [] : table);
+
+                    // Ensure 3 of clubs is played on the very first turn of the game
+                    let forcedPlays = validPlays;
+                    if (aiHand.some(c => c.value === 30) && table.length === 0) {
+                        forcedPlays = validPlays.filter(combo => combo.some(c => c.value === 30));
+                    }
+
+                    if (forcedPlays.length === 0) {
+                        setLogs(`AI ${turn} passed.`);
+                        nextTurn(null, turn);
+                        return;
+                    }
+
+                    let chosenPlay;
+                    if (difficulty === 'EASY') {
+                        chosenPlay = forcedPlays[0]; // Always play weakest valid card
+                    } else if (difficulty === 'NORMAL') {
+                        // Randomly pick from lower half of valid plays to balance
+                        const maxIndex = Math.max(1, Math.floor(forcedPlays.length / 2));
+                        chosenPlay = forcedPlays[Math.floor(Math.random() * maxIndex)];
+                    } else if (difficulty === 'TIRADOR') {
+                        // Aggressive: plays highest possible combination to shut down opponents
+                        chosenPlay = forcedPlays[forcedPlays.length - 1]; 
+                    }
+
+                    setLogs(`AI ${turn} played ${chosenPlay.map(c=>c.label).join(', ')}`);
+                    nextTurn(chosenPlay, turn);
+
+                }, 1500); // Simulated delay for realism on HUD
+
+                return () => clearTimeout(timer);
+            }, [turn, gameState]);
+
+            // User Interactions
+            const toggleCard = (card) => {
+                if (turn !== 0) return;
+                if (selectedCards.includes(card)) {
+                    setSelectedCards(selectedCards.filter(c => c !== card));
+                } else {
+                    if (selectedCards.length >= 3) return; // limit to triples for now
+                    setSelectedCards([...selectedCards, card].sort((a,b) => a.value - b.value));
+                }
+            };
+
+            const handlePlay = () => {
+                if (turn !== 0 || selectedCards.length === 0) return;
+                
+                // Validate same ranks if multiple
+                if (selectedCards.length > 1 && !selectedCards.every(c => c.rank === selectedCards[0].rank)) {
+                    setLogs("Invalid selection: Ranks must match!");
+                    return;
+                }
+
+                // Validate beats table
+                const isFreeTurn = lastPlayedTurn === 0 || table.length === 0;
+                if (!isFreeTurn) {
+                    if (selectedCards.length !== table.length) {
+                        setLogs(`Must play exactly ${table.length} cards!`);
+                        return;
+                    }
+                    if (selectedCards[selectedCards.length-1].value <= table[table.length-1].value) {
+                        setLogs("Cards not high enough to beat table!");
+                        return;
+                    }
+                } else if (hands[0].some(c => c.value === 30) && !selectedCards.some(c => c.value === 30)) {
+                    setLogs("You must play the 3♣ to start the game!");
+                    return;
+                }
+
+                setLogs(`You played ${selectedCards.map(c=>c.label).join(', ')}`);
+                nextTurn(selectedCards, 0);
+            };
+
+            const handlePass = () => {
+                if (turn !== 0) return;
+                if (lastPlayedTurn === 0 || table.length === 0) {
+                    setLogs("Cannot pass on a free turn!");
+                    return;
+                }
+                setLogs("You passed.");
+                nextTurn(null, 0);
+            };
+
+            // Rendering
+            if (gameState === 'MENU') {
+                return (
+                    <div id="mrbd-viewport" className="items-center justify-center space-y-6">
+                        <h1 className="text-4xl font-bold text-green-400 tracking-widest text-center">PUSOY DOS</h1>
+                        <p className="text-gray-400 text-sm">Select Difficulty via Neural Band Tap</p>
+                        <div className="flex flex-col space-y-4 w-3/4">
+                            {['EASY', 'NORMAL', 'TIRADOR'].map(diff => (
+                                <button 
+                                    key={diff} 
+                                    onClick={() => startGame(diff)}
+                                    className="bg-gray-900 border-2 border-green-500 rounded-lg py-3 text-xl font-bold hover:bg-green-700 transition"
+                                >
+                                    {diff}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div id="mrbd-viewport" className="justify-between p-4 relative">
+                    {/* HUD Overlay Text */}
+                    <div className="absolute top-2 left-2 text-xs text-green-500 bg-black bg-opacity-50 px-2 rounded">
+                        MRBD LINK ACTIVE | {difficulty} MODE
+                    </div>
+
+                    {/* Top: Opponents HUD */}
+                    <div className="flex justify-between items-start mt-6">
+                        <div className={`p-2 rounded border border-gray-700 ${turn === 1 ? 'border-green-400 bg-green-900' : 'bg-black'}`}>
+                            <div className="text-xs text-gray-400">AI 1</div>
+                            <div className="font-bold text-lg">{hands[1]?.length} 🂠</div>
+                        </div>
+                        <div className={`p-2 rounded border border-gray-700 ${turn === 2 ? 'border-green-400 bg-green-900' : 'bg-black'}`}>
+                            <div className="text-xs text-gray-400">AI 2</div>
+                            <div className="font-bold text-lg">{hands[2]?.length} 🂠</div>
+                        </div>
+                        <div className={`p-2 rounded border border-gray-700 ${turn === 3 ? 'border-green-400 bg-green-900' : 'bg-black'}`}>
+                            <div className="text-xs text-gray-400">AI 3</div>
+                            <div className="font-bold text-lg">{hands[3]?.length} 🂠</div>
+                        </div>
+                    </div>
+
+                    {/* Center: Table & Logs */}
+                    <div className="flex flex-col items-center justify-center flex-grow">
+                        <div className="text-center text-sm mb-4 text-green-300 font-mono h-6">{logs}</div>
+                        
+                        <div className="flex space-x-2 bg-black bg-opacity-40 p-4 rounded-xl min-w-[200px] justify-center min-h-[100px] border border-green-800">
+                            {table.length === 0 ? (
+                                <span className="text-gray-500 self-center">Table Clear</span>
+                            ) : (
+                                table.map((c, i) => (
+                                    <div key={i} className={`bg-gray-100 rounded-md w-12 h-16 flex items-center justify-center text-xl font-bold ${c.isRed ? 'text-red-600' : 'text-black'}`}>
+                                        {c.label}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        {table.length > 0 && <div className="text-xs mt-2 text-gray-400">Played by P{lastPlayedTurn}</div>}
+                    </div>
+
+                    {/* Bottom: User Controls (Optimized for swiping/scrolling) */}
+                    <div className={`flex flex-col space-y-3 p-3 rounded-xl border ${turn === 0 ? 'border-green-400 bg-green-900 bg-opacity-40' : 'border-gray-800'}`}>
+                        <div className="flex justify-between items-center px-1">
+                            <span className="text-sm text-gray-300">Your Hand ({hands[0].length})</span>
+                            {turn === 0 && <span className="text-xs text-green-400 animate-pulse">YOUR TURN</span>}
+                        </div>
+                        
+                        {/* Swipeable Card Row */}
+                        <div className="flex overflow-x-auto hide-scroll space-x-2 py-2">
+                            {hands[0].map((c, i) => {
+                                const isSelected = selectedCards.includes(c);
+                                return (
+                                    <button 
+                                        key={i} 
+                                        onClick={() => toggleCard(c)}
+                                        className={`flex-shrink-0 w-12 h-16 rounded-md bg-gray-100 flex items-center justify-center text-xl font-bold border-2 transition-all duration-200
+                                            ${c.isRed ? 'text-red-600' : 'text-black'}
+                                            ${isSelected ? 'card-selected' : 'border-transparent'}
+                                            ${turn !== 0 ? 'opacity-50' : 'hover:-translate-y-1'}
+                                        `}
+                                    >
+                                        {c.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex space-x-2">
+                            <button 
+                                onClick={handlePass}
+                                disabled={turn !== 0}
+                                className="flex-1 bg-gray-800 border border-gray-600 py-2 rounded text-sm font-bold disabled:opacity-50"
+                            >
+                                PASS
+                            </button>
+                            <button 
+                                onClick={handlePlay}
+                                disabled={turn !== 0 || selectedCards.length === 0}
+                                className="flex-2 bg-green-600 border border-green-400 py-2 px-6 rounded text-sm font-bold disabled:opacity-50"
+                            >
+                                PLAY SELECTED
+                            </button>
+                        </div>
+                    </div>
+
+                    {gameState === 'GAMEOVER' && (
+                        <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center space-y-6">
+                            <div className="text-5xl font-bold text-center text-green-400">{logs}</div>
+                            <button onClick={() => setGameState('MENU')} className="bg-green-700 px-6 py-3 rounded text-xl border border-green-400">Play Again</button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

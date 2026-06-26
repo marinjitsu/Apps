@@ -116,7 +116,12 @@
                 const triples = getCombosOfSize(hand, 3);
                 const fiveCardCombos = [];
                 if (hand.length >= 5) {
-                    getCombinations(hand, 5).forEach(subset => { if (evaluate5CardHand(subset)) fiveCardCombos.push(subset); });
+                    const all5Combos = getCombinations(hand, 5);
+                    for (let i = 0; i < all5Combos.length; i++) {
+                        if (evaluate5CardHand(all5Combos[i])) {
+                            fiveCardCombos.push(all5Combos[i]);
+                        }
+                    }
                 }
                 return [...singles, ...pairs, ...triples, ...fiveCardCombos];
             }
@@ -129,14 +134,15 @@
                 const tableEval = evaluate5CardHand(currentTable);
                 if (!tableEval) return [];
                 const targetCombos = [];
-                getCombinations(hand, 5).forEach(subset => {
-                    const currentEval = evaluate5CardHand(subset);
+                const possibleCombos = getCombinations(hand, 5);
+                for (let i = 0; i < possibleCombos.length; i++) {
+                    const currentEval = evaluate5CardHand(possibleCombos[i]);
                     if (currentEval) {
                         if (currentEval.tier > tableEval.tier || (currentEval.tier === tableEval.tier && currentEval.score > tableEval.score)) {
-                            targetCombos.push(subset);
+                            targetCombos.push(possibleCombos[i]);
                         }
                     }
-                });
+                }
                 return targetCombos;
             }
             return [];

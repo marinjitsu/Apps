@@ -3,43 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Meta Ray-Ban Display HUD - Pusoy Dos</title>
+    <title>Pusoy Dos 5-Card HUD - Spatial Navigation</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
 
     <style>
         body { 
             background-color: #000000; 
             color: #ffffff; 
             overflow: hidden; 
-            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             user-select: none;
         }
         
-        /* 1:1 Square Aspects matching the Meta Ray-Ban Waveguide Display Profile */
         #mrbd-viewport {
             width: 100vw; 
             height: 100vh;
-            max-width: 600px;
-            max-height: 600px;
-            margin: 0 auto;
             display: flex;
             flex-direction: column;
-            background: #022c16; /* Green felt table background optimized for transparency layers */
-            position: relative;
+            background: radial-gradient(circle at center, #042f1a 0%, #000000 85%); 
         }
 
         .hide-scroll::-webkit-scrollbar { display: none; }
         .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
         .card-selected {
-            transform: translateY(-8px);
-            box-shadow: 0 0 12px #22c55e;
-            border-color: #4ade80 !important;
+            transform: translateY(-12px);
+            box-shadow: 0 0 15px 3px #22c55e;
+            border-color: #22c55e;
         }
     </style>
 </head>
@@ -49,11 +43,11 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // --- ENGINES & DATA CONSTANTS ---
+        // --- CARD ENGINE DATA LAYER ---
         class Card {
             constructor(rank, suit) {
-                this.rank = rank; // 3 to 15 (11=J, 12=Q, 13=K, 14=A, 15=2)
-                this.suit = suit; // 0=♣, 1=♠, 2=♥, 3=♦
+                this.rank = rank;
+                this.suit = suit;
                 this.value = rank * 10 + suit; 
                 const suits = ['♣', '♠', '♥', '♦'];
                 const ranks = {11:'J', 12:'Q', 13:'K', 14:'A', 15:'2'};
@@ -62,7 +56,7 @@
             }
         }
 
-        const generateDeck = () => {
+        const createDeck = () => {
             let deck = [];
             for (let r = 3; r <= 15; r++) {
                 for (let s = 0; s <= 3; s++) deck.push(new Card(r, s));
@@ -70,7 +64,7 @@
             return deck.sort(() => Math.random() - 0.5);
         };
 
-        const check5CardHand = (cards) => {
+        const evaluate5CardHand = (cards) => {
             if (cards.length !== 5) return null;
             const sorted = [...cards].sort((a, b) => a.value - b.value);
             const ranks = sorted.map(c => c.rank);
@@ -88,111 +82,110 @@
             const rankKeys = Object.keys(counts).map(Number).sort((a,b) => counts[b] - counts[a] || b - a);
 
             if (isStraight && isFlush) return { name: "Straight Flush", tier: 5, score: 5000 + sorted[4].value };
-            if (freq[0] === 4) return { name: "Four of a Kind", tier: 4, score: 4000 + sorted.filter(c => c.rank === rankKeys[0])[0].value };
-            if (freq[0] === 3 && freq[1] === 2) return { name: "Full House", tier: 3, score: 3000 + sorted.filter(c => c.rank === rankKeys[0])[0].value };
+            if (freq[0] === 4) return { name: "Four of a Kind", tier: 4, score: 4000 + sorted.filter(c => c.rank === rankKeys[0]).sort((a,b)=>b.value-a.value)[0].value };
+            if (freq[0] === 3 && freq[1] === 2) return { name: "Full House", tier: 3, score: 3000 + sorted.filter(c => c.rank === rankKeys[0]).sort((a,b)=>b.value-a.value)[0].value };
             if (isFlush) return { name: "Flush", tier: 2, score: 2000 + sorted[4].value };
             if (isStraight) return { name: "Straight", tier: 1, score: 1000 + sorted[4].value };
             
             return null;
         };
 
-        const findCombinations = (arr, k) => {
-            const results = [];
+        const getCombinations = (array, k) => {
+            const result = [];
             const helper = (start, combo) => {
-                if (combo.length === k) { results.push([...combo]); return; }
-                for (let i = start; i < arr.length; i++) {
-                    combo.push(arr[i]); helper(i + 1, combo); combo.pop();
+                if (combo.length === k) { result.push([...combo]); return; }
+                for (let i = start; i < array.length; i++) {
+                    combo.push(array[i]); helper(i + 1, combo); combo.pop();
                 }
             };
-            helper(0, []); return results;
+            helper(0, []); return result;
         };
 
-        const findSets = (hand, size) => {
+        const getCombosOfSize = (hand, size) => {
             let counts = {};
             hand.forEach(c => { counts[c.rank] = counts[c.rank] || []; counts[c.rank].push(c); });
             let combos = [];
-            Object.values(counts).forEach(g => { if(g.length >= size) combos.push(g.slice(0, size)); });
+            Object.values(counts).forEach(group => { if(group.length >= size) combos.push(group.slice(0, size)); });
             return combos.sort((a, b) => a[a.length-1].value - b[b.length-1].value);
         };
 
-        const fetchValidPlays = (hand, currentTable) => {
+        const getValidPlays = (hand, currentTable) => {
             if (currentTable.length === 0) {
                 const singles = hand.map(c => [c]);
-                const pairs = findSets(hand, 2);
-                const triples = findSets(hand, 3);
+                const pairs = getCombosOfSize(hand, 2);
+                const triples = getCombosOfSize(hand, 3);
                 const fiveCardCombos = [];
                 if (hand.length >= 5) {
-                    findCombinations(hand, 5).forEach(sub => { if (check5CardHand(sub)) fiveCardCombos.push(sub); });
+                    getCombinations(hand, 5).forEach(subset => { if (evaluate5CardHand(subset)) fiveCardCombos.push(subset); });
                 }
                 return [...singles, ...pairs, ...triples, ...fiveCardCombos];
             }
-            const size = currentTable.length;
-            if (size === 1) return hand.filter(c => c.value > currentTable[0].value).map(c => [c]);
-            if (size === 2 || size === 3) {
-                return findSets(hand, size).filter(c => c[c.length-1].value > currentTable[currentTable.length-1].value);
+            const reqSize = currentTable.length;
+            if (reqSize === 1) return hand.filter(c => c.value > currentTable[0].value).map(c => [c]);
+            if (reqSize === 2 || reqSize === 3) {
+                return getCombosOfSize(hand, reqSize).filter(combo => combo[combo.length-1].value > currentTable[currentTable.length-1].value);
             }
-            if (size === 5) {
-                const targetEval = check5CardHand(currentTable);
-                if (!targetEval) return [];
-                const valid5s = [];
-                findCombinations(hand, 5).forEach(sub => {
-                    const currentEval = check5CardHand(sub);
+            if (reqSize === 5) {
+                const tableEval = evaluate5CardHand(currentTable);
+                if (!tableEval) return [];
+                const targetCombos = [];
+                getCombinations(hand, 5).forEach(subset => {
+                    const currentEval = evaluate5CardHand(subset);
                     if (currentEval) {
-                        if (currentEval.tier > targetEval.tier || (currentEval.tier === targetEval.tier && currentEval.score > targetEval.score)) {
-                            valid5s.push(sub);
+                        if (currentEval.tier > tableEval.tier || (currentEval.tier === tableEval.tier && currentEval.score > tableEval.score)) {
+                            targetCombos.push(subset);
                         }
                     }
                 });
-                return valid5s;
+                return targetCombos;
             }
             return [];
         };
 
-        // --- APP CONTROLLER ---
+        // --- MAIN APP COMPONENT ---
         const App = () => {
             const [gameState, setGameState] = useState('MENU'); 
-            const [difficulty, setDifficulty] = useState('NORMAL'); // EASY, NORMAL, HUSTLER
-            const [hands, setHands] = useState([[], [], [], []]); // P0 (User), P1, P2, P3
+            const [difficulty, setDifficulty] = useState('NORMAL');
+            const [hands, setHands] = useState([[], [], [], []]); 
             const [table, setTable] = useState([]);
             const [turn, setTurn] = useState(0);
-            const [lastPlayOwner, setLastPlayOwner] = useState(-1);
+            const [lastPlayedTurn, setLastPlayedTurn] = useState(-1);
             const [selectedCards, setSelectedCards] = useState([]);
-            const [hudLog, setHudLog] = useState("System Ready.");
+            const [logs, setLogs] = useState("Awaiting command Link...");
 
-            // Spatial D-Pad Coordinates Indexing System
-            const [menuFocusIdx, setMenuFocusIdx] = useState(1); // Easy(0), Normal(1), Hustler(2)
-            const [interactiveZone, setInteractiveZone] = useState('HAND'); // 'HAND' or 'CONTROLS'
+            const [menuFocus, setMenuFocus] = useState(1); 
+            const [focusZone, setFocusZone] = useState('HAND'); 
             const [focusedCardIdx, setFocusedCardIdx] = useState(0);
-            const [focusedActionIdx, setFocusedActionIdx] = useState(1); // Pass(0), Play(1)
+            const [focusedBtnIdx, setFocusedBtnIdx] = useState(1); 
+
+            const cardContainerRef = useRef(null);
 
             useEffect(() => {
-                if (interactiveZone === 'HAND' && gameState === 'PLAYING') {
-                    const activeCard = document.getElementById(`card-node-${focusedCardIdx}`);
-                    if (activeCard) {
-                        activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                if (focusZone === 'HAND' && gameState === 'PLAYING') {
+                    const focusedEl = document.getElementById(`card-${focusedCardIdx}`);
+                    if (focusedEl) {
+                        focusedEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                     }
                 }
-            }, [focusedCardIdx, interactiveZone, gameState]);
+            }, [focusedCardIdx, focusZone, gameState]);
 
-            // Hardware D-Pad Spatial Navigation Routing Map
             useEffect(() => {
-                const processHardwareNavigation = (e) => {
+                const handleKeyDown = (e) => {
                     if (gameState === 'MENU') {
                         if (e.key === 'ArrowUp') {
                             e.preventDefault();
-                            setMenuFocusIdx(prev => Math.max(0, prev - 1));
+                            setMenuFocus(prev => Math.max(0, prev - 1));
                         } else if (e.key === 'ArrowDown') {
                             e.preventDefault();
-                            setMenuFocusIdx(prev => Math.min(2, prev + 1));
+                            setMenuFocus(prev => Math.min(2, prev + 1));
                         } else if (e.key === 'Enter') {
-                            const configurations = ['EASY', 'NORMAL', 'HUSTLER'];
-                            initiateGameSession(configurations[menuFocusIdx]);
+                            const tiers = ['EASY', 'NORMAL', 'TIRADOR'];
+                            startGame(tiers[menuFocus]);
                         }
                     } 
                     
                     else if (gameState === 'PLAYING') {
                         if (e.key === 'Escape') {
-                            e.preventDefault();
                             if (selectedCards.length > 0) {
                                 setSelectedCards([]);
                             } else {
@@ -201,9 +194,9 @@
                             return;
                         }
 
-                        if (turn !== 0) return; // Freeze user input mapping while computing AI steps
+                        if (turn !== 0) return; 
 
-                        if (interactiveZone === 'HAND') {
+                        if (focusZone === 'HAND') {
                             if (e.key === 'ArrowLeft') {
                                 e.preventDefault();
                                 setFocusedCardIdx(prev => Math.max(0, prev - 1));
@@ -212,330 +205,310 @@
                                 setFocusedCardIdx(prev => Math.min(hands[0].length - 1, prev + 1));
                             } else if (e.key === 'ArrowUp') {
                                 e.preventDefault();
-                                if (hands[0].length > 0) setInteractiveZone('CONTROLS');
+                                if (hands[0].length > 0) setFocusZone('BUTTONS');
                             } else if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (hands[0][focusedCardIdx]) toggleCardNode(hands[0][focusedCardIdx]);
+                                if (hands[0][focusedCardIdx]) {
+                                    toggleCard(hands[0][focusedCardIdx]);
+                                }
                             }
                         } 
                         
-                        else if (interactiveZone === 'CONTROLS') {
+                        else if (focusZone === 'BUTTONS') {
                             if (e.key === 'ArrowLeft') {
                                 e.preventDefault();
-                                setFocusedActionIdx(0);
+                                setFocusedBtnIdx(0); 
                             } else if (e.key === 'ArrowRight') {
                                 e.preventDefault();
-                                setFocusedActionIdx(1);
+                                setFocusedBtnIdx(1); 
                             } else if (e.key === 'ArrowDown') {
                                 e.preventDefault();
-                                setInteractiveZone('HAND');
+                                setFocusZone('HAND');
                             } else if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (focusedActionIdx === 0) executeUserPass();
-                                else executeUserPlay();
+                                if (focusedBtnIdx === 0) handlePass();
+                                else handlePlay();
                             }
                         }
                     } 
                     
                     else if (gameState === 'GAMEOVER') {
                         if (e.key === 'Enter' || e.key === 'Escape') {
-                            e.preventDefault();
                             setGameState('MENU');
                         }
                     }
                 };
 
-                window.addEventListener('keydown', processHardwareNavigation);
-                return () => window.removeEventListener('keydown', processHardwareNavigation);
-            }, [gameState, menuFocusIdx, interactiveZone, focusedCardIdx, focusedActionIdx, hands, turn, selectedCards]);
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [gameState, menuFocus, focusZone, focusedCardIdx, focusedBtnIdx, hands, turn, selectedCards]);
 
-            const initiateGameSession = (selectedDiff) => {
-                const freshDeck = generateDeck();
-                const initializedHands = [
-                    freshDeck.slice(0, 13),
-                    freshDeck.slice(13, 26),
-                    freshDeck.slice(26, 39),
-                    freshDeck.slice(39, 52)
-                ];
-                initializedHands.forEach(h => h.sort((a, b) => a.value - b.value));
+            const startGame = (diff) => {
+                const deck = createDeck();
+                const newHands = [deck.slice(0,13), deck.slice(13,26), deck.slice(26,39), deck.slice(39,52)];
+                newHands.forEach(h => h.sort((a,b) => a.value - b.value));
                 
-                // Classic rules: Player holding the lowest value card (3♣) opens the table
-                let startingPlayer = initializedHands.findIndex(h => h.some(c => c.value === 30));
+                let startingPlayer = newHands.findIndex(h => h.some(c => c.value === 30));
                 
-                setDifficulty(selectedDiff);
-                setHands(initializedHands);
+                setDifficulty(diff);
+                setHands(newHands);
                 setTable([]);
                 setTurn(startingPlayer);
-                setLastPlayOwner(startingPlayer);
+                setLastPlayedTurn(startingPlayer);
                 setFocusedCardIdx(0);
-                setInteractiveZone('HAND');
+                setFocusZone('HAND');
                 setGameState('PLAYING');
-                setHudLog(`Match Start. P${startingPlayer === 0 ? 'You' : startingPlayer} fields 3♣.`);
+                setLogs(`P${startingPlayer === 0 ? 'You' : startingPlayer} goes first (holds 3♣).`);
             };
 
-            const advanceTurnCycle = (cardsPlayed, activePlayer) => {
-                if (cardsPlayed) {
-                    setTable(cardsPlayed);
-                    setLastPlayOwner(activePlayer);
+            const nextTurn = (playedCards, playerIdx) => {
+                if (playedCards) {
+                    setTable(playedCards);
+                    setLastPlayedTurn(playerIdx);
                     
-                    const runningHands = [...hands];
-                    runningHands[activePlayer] = runningHands[activePlayer].filter(c => !cardsPlayed.includes(c));
-                    setHands(runningHands);
+                    const newHands = [...hands];
+                    newHands[playerIdx] = newHands[playerIdx].filter(c => !playedCards.includes(c));
+                    setHands(newHands);
 
-                    if (runningHands[activePlayer].length === 0) {
+                    if (newHands[playerIdx].length === 0) {
                         setGameState('GAMEOVER');
-                        setHudLog(activePlayer === 0 ? "🏆 MATCH COMPLETE: YOU WIN" : `💀 OVERLAY SUMMARY: P${activePlayer} WIN`);
+                        setLogs(playerIdx === 0 ? "🏆 YOU WIN!" : `💀 AI ${playerIdx} WINS!`);
                         return;
                     }
                 }
 
-                let nextPlayerIdx = (activePlayer + 1) % 4;
-                if (nextPlayerIdx === lastPlayOwner && !cardsPlayed) {
+                let nextIdx = (playerIdx + 1) % 4;
+                if (nextIdx === lastPlayedTurn && !playedCards) {
                     setTable([]);
-                    setHudLog(`Table cleared. Free play to P${lastPlayOwner === 0 ? 'You' : lastPlayOwner}.`);
+                    setLogs(`Everyone passed. Free turn for P${lastPlayedTurn === 0 ? 'You' : lastPlayedTurn}.`);
                 }
                 
                 setSelectedCards([]);
-                if (nextPlayerIdx === 0) {
+                
+                if (nextIdx === 0) {
                     setFocusedCardIdx(0);
-                    setInteractiveZone('HAND');
+                    setFocusZone('HAND');
                 }
-                setTurn(nextPlayerIdx);
+                setTurn(nextIdx);
             };
 
-            // AI Procedural Matrix Strategy
             useEffect(() => {
                 if (gameState !== 'PLAYING' || turn === 0) return;
 
-                const logicThread = setTimeout(() => {
+                const timer = setTimeout(() => {
                     const aiHand = hands[turn];
-                    const isTableCleared = lastPlayOwner === turn || table.length === 0;
-                    const validOptions = fetchValidPlays(aiHand, isTableCleared ? [] : table);
+                    const isFreeTurn = lastPlayedTurn === turn || table.length === 0;
+                    const validPlays = getValidPlays(aiHand, isFreeTurn ? [] : table);
 
-                    let enforcedOptions = validOptions;
+                    let forcedPlays = validPlays;
                     if (aiHand.some(c => c.value === 30) && table.length === 0) {
-                        enforcedOptions = validOptions.filter(combo => combo.some(c => c.value === 30));
+                        forcedPlays = validPlays.filter(combo => combo.some(c => c.value === 30));
                     }
 
-                    if (enforcedOptions.length === 0) {
-                        setHudLog(`P${turn} passes control.`);
-                        advanceTurnCycle(null, turn);
+                    if (forcedPlays.length === 0) {
+                        setLogs(`AI ${turn} passed.`);
+                        nextTurn(null, turn);
                         return;
                     }
 
-                    let chosenArray;
+                    let chosenPlay;
                     if (difficulty === 'EASY') {
-                        chosenArray = enforcedOptions[0]; // Always dumps lowest viable card weight
+                        chosenPlay = forcedPlays[0]; 
                     } else if (difficulty === 'NORMAL') {
-                        const safetyThreshold = Math.max(1, Math.floor(enforcedOptions.length / 2));
-                        chosenArray = enforcedOptions[Math.floor(Math.random() * safetyThreshold)];
-                    } else if (difficulty === 'HUSTLER') {
-                        // Advanced tactical priority targeting combinations over individual drops
-                        const highTier5s = enforcedOptions.filter(p => p.length === 5);
-                        if (highTier5s.length > 0 && isTableCleared) {
-                            chosenArray = highTier5s[highTier5s.length - 1]; 
+                        const midIndex = Math.max(1, Math.floor(forcedPlays.length / 2));
+                        chosenPlay = forcedPlays[Math.floor(Math.random() * midIndex)];
+                    } else if (difficulty === 'TIRADOR') {
+                        const fiveCardPlays = forcedPlays.filter(p => p.length === 5);
+                        if (fiveCardPlays.length > 0 && isFreeTurn) {
+                            chosenPlay = fiveCardPlays[fiveCardPlays.length - 1]; 
                         } else {
-                            chosenArray = enforcedOptions[enforcedOptions.length - 1]; // Plays highest optimization path
+                            chosenPlay = forcedPlays[forcedPlays.length - 1]; 
                         }
                     }
 
-                    let outputMsg = `P${turn} played `;
-                    if (chosenArray.length === 5) outputMsg += `${check5CardHand(chosenArray).name}: `;
-                    outputMsg += chosenArray.map(c => c.label).join(' ');
+                    let announce = `AI ${turn} played `;
+                    if (chosenPlay.length === 5) announce += `${evaluate5CardHand(chosenPlay).name}: `;
+                    announce += chosenPlay.map(c=>c.label).join(', ');
 
-                    setHudLog(outputMsg);
-                    advanceTurnCycle(chosenArray, turn);
-                }, 1400);
+                    setLogs(announce);
+                    nextTurn(chosenPlay, turn);
+                }, 1600);
 
-                return () => clearTimeout(logicThread);
-            }, [turn, gameState]);
+                return () => clearTimeout(timer);
+            }, [turn, gameState, hands, lastPlayedTurn, table, difficulty]);
 
-            const toggleCardNode = (cardObj) => {
-                if (selectedCards.includes(cardObj)) {
-                    setSelectedCards(selectedCards.filter(c => c !== cardObj));
+            const toggleCard = (card) => {
+                if (selectedCards.includes(card)) {
+                    setSelectedCards(selectedCards.filter(c => c !== card));
                 } else {
                     if (selectedCards.length >= 5) return; 
-                    setSelectedCards([...selectedCards, cardObj].sort((a,b) => a.value - b.value));
+                    setSelectedCards([...selectedCards, card].sort((a,b) => a.value - b.value));
                 }
             };
 
-            const executeUserPlay = () => {
+            const handlePlay = () => {
                 if (turn !== 0 || selectedCards.length === 0) return;
                 const len = selectedCards.length;
 
                 if (len !== 1 && len !== 2 && len !== 3 && len !== 5) {
-                    setHudLog("Select exactly 1, 2, 3, or 5 cards.");
+                    setLogs("Invalid selection size! Play 1, 2, 3, or 5 cards.");
                     return;
                 }
                 if (len < 5 && len > 1 && !selectedCards.every(c => c.rank === selectedCards[0].rank)) {
-                    setHudLog("Combination values mismatch.");
+                    setLogs("Ranks must match for pairs/triples!");
                     return;
                 }
 
-                let structured5CardEval = null;
+                let userEval = null;
                 if (len === 5) {
-                    structured5CardEval = check5CardHand(selectedCards);
-                    if (!structured5CardEval) {
-                        setHudLog("Invalid 5-Card hand variant.");
+                    userEval = evaluate5CardHand(selectedCards);
+                    if (!userEval) {
+                        setLogs("Invalid structural configuration layout.");
                         return;
                     }
                 }
 
-                const isTableCleared = lastPlayOwner === 0 || table.length === 0;
-                if (!isTableCleared) {
+                const isFreeTurn = lastPlayedTurn === 0 || table.length === 0;
+                if (!isFreeTurn) {
                     if (len !== table.length) {
-                        setHudLog(`Must match field size (${table.length}).`);
+                        setLogs(`Table requires exactly ${table.length} cards.`);
                         return;
                     }
                     if (len < 5) {
                         if (selectedCards[len-1].value <= table[table.length-1].value) {
-                            setHudLog("Insufficient card weight hierarchy.");
+                            setLogs("Value execution parameters too low.");
                             return;
                         }
                     } else {
-                        const tableEval = check5CardHand(table);
-                        const dominatesTier = structured5CardEval.tier > tableEval.tier;
-                        const winsTieBreaker = (structured5CardEval.tier === tableEval.tier) && (structured5CardEval.score > tableEval.score);
-                        if (!dominatesTier && !winsTieBreaker) {
-                            setHudLog(`Your 5-Card combo fails to beat table.`);
+                        const tableEval = evaluate5CardHand(table);
+                        const beatsTier = userEval.tier > tableEval.tier;
+                        const tiesTierBeatsScore = (userEval.tier === tableEval.tier) && (userEval.score > tableEval.score);
+                        if (!beatsTier && !tiesTierBeatsScore) {
+                            setLogs(`Your ${userEval.name} fails to match table criteria.`);
                             return;
                         }
                     }
                 } else if (hands[0].some(c => c.value === 30) && !selectedCards.some(c => c.value === 30)) {
-                    setHudLog("First play requires 3♣ inclusion.");
+                    setLogs("Opening play must include the 3♣.");
                     return;
                 }
 
-                let printLog = `You played `;
-                if (len === 5) printLog += `${structured5CardEval.name}: `;
-                printLog += selectedCards.map(c => c.label).join(' ');
+                let displayLog = `You dropped `;
+                if (len === 5) displayLog += `${userEval.name}: `;
+                displayLog += selectedCards.map(c=>c.label).join(', ');
 
-                setHudLog(printLog);
-                advanceTurnCycle(selectedCards, 0);
+                setLogs(displayLog);
+                nextTurn(selectedCards, 0);
             };
 
-            const executeUserPass = () => {
+            const handlePass = () => {
                 if (turn !== 0) return;
-                if (lastPlayOwner === 0 || table.length === 0) {
-                    setHudLog("Cannot PASS on an open field.");
+                if (lastPlayedTurn === 0 || table.length === 0) {
+                    setLogs("Cannot PASS on a free turn layout.");
                     return;
                 }
-                setHudLog("You checked / passed.");
-                advanceTurnCycle(null, 0);
+                setLogs("You passed.");
+                nextTurn(null, 0);
             };
 
-            // --- VIEW OVERLAY INJECTION PHASES ---
             if (gameState === 'MENU') {
                 return (
-                    <div id="mrbd-viewport" className="items-center justify-center p-6 space-y-8 bg-black">
-                        <div className="text-center">
-                            <h1 className="text-3xl font-extrabold text-emerald-400 tracking-wider">PUSOY DOS</h1>
-                            <div className="text-[10px] font-mono text-emerald-600 mt-1 tracking-widest">RAY-BAN HUD MATRIX OVERLAY</div>
-                        </div>
-                        
-                        <div className="w-full max-w-xs space-y-3">
-                            {['EASY', 'NORMAL', 'HUSTLER'].map((tier, idx) => {
-                                const activeSelection = menuFocusIdx === idx;
+                    <div id="mrbd-viewport" className="items-center justify-center space-y-6">
+                        <h1 className="text-4xl font-bold text-emerald-400 tracking-wider text-center">PUSOY DOS <span className="block text-xs font-mono mt-1 text-white opacity-80">HUD D-PAD CORE EXTENSION</span></h1>
+                        <p className="text-gray-400 text-[10px] font-mono tracking-widest text-center">SWIPE UP/DOWN TO NAVIGATE // ENTER TO LOAD</p>
+                        <div className="flex flex-col space-y-3 w-64">
+                            {['EASY', 'NORMAL', 'TIRADOR'].map((diff, idx) => {
+                                const isFocused = menuFocus === idx;
                                 return (
                                     <button 
-                                        key={tier} 
-                                        onClick={() => { setMenuFocusIdx(idx); initiateGameSession(tier); }}
-                                        className={`w-full font-mono border py-3 text-xs font-bold tracking-widest transition-all rounded duration-75
-                                            ${activeSelection ? 'bg-emerald-500 text-black border-white ring-4 ring-emerald-400 scale-102 font-black' : 'bg-transparent text-emerald-500 border-emerald-900 opacity-60'}
+                                        key={diff} 
+                                        onClick={() => { setMenuFocus(idx); startGame(diff); }}
+                                        className={`font-mono border py-3 text-sm font-bold tracking-widest transition-all duration-150 rounded-lg
+                                            ${isFocused ? 'bg-emerald-500 text-black border-white ring-4 ring-emerald-400 scale-105 shadow-lg' : 'bg-black text-emerald-400 border-emerald-800 opacity-60'}
                                         `}
                                     >
-                                        {activeSelection ? `[ ${tier} ]` : tier}
+                                        {isFocused ? `> ${diff} <` : diff}
                                     </button>
                                 );
                             })}
                         </div>
-                        <div className="text-[9px] text-gray-500 font-mono text-center">UP / DOWN TO SCROLL • ENTER TO LAUNCH</div>
                     </div>
                 );
             }
 
             return (
-                <div id="mrbd-viewport" className="p-3 justify-between">
-                    {/* Upper HUD Telemetry Ribbon */}
-                    <div className="flex justify-between items-center border-b border-emerald-900 pb-1.5 font-mono text-[9px] text-emerald-400">
-                        <span>SYS: ACCESS LAYER ACTIVE</span>
-                        <span className="bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800 font-bold">MODE: {difficulty}</span>
+                <div id="mrbd-viewport" className="justify-between p-4 relative">
+                    <div className="absolute top-2 left-2 text-[9px] font-mono text-emerald-500 bg-black bg-opacity-80 px-2 py-0.5 rounded border border-emerald-900">
+                        LINK ACTIVE // VOLT OVERLAY // MODE: {difficulty}
                     </div>
 
-                    {/* NPC Telemetry Node Monitors */}
-                    <div className="grid grid-cols-3 gap-2 my-2">
-                        {[1, 2, 3].map(aiNum => (
-                            <div key={aiNum} className={`p-1.5 rounded border font-mono text-center transition-all ${turn === aiNum ? 'border-emerald-400 bg-emerald-950 text-emerald-300' : 'border-emerald-950 bg-black bg-opacity-40 text-gray-400'}`}>
-                                <div className="text-[8px] opacity-70">COMP 0{aiNum}</div>
-                                <div className="font-bold text-xs mt-0.5">{hands[aiNum]?.length} CARDS</div>
+                    <div className="flex justify-between items-start mt-6">
+                        {[1, 2, 3].map(aiIdx => (
+                            <div key={aiIdx} className={`p-2 rounded border font-mono text-center min-w-[70px] transition-colors duration-200 ${turn === aiIdx ? 'border-emerald-400 bg-emerald-950 text-emerald-300' : 'border-gray-900 bg-black text-gray-600'}`}>
+                                <div className="text-[9px]">COMP 0{aiIdx}</div>
+                                <div className="font-bold text-sm">{hands[aiIdx] ? hands[aiIdx].length : 0} 🂠</div>
                             </div>
                         ))}
                     </div>
 
-                    {/* Central Green Table Workspace */}
-                    <div className="flex-grow flex flex-col items-center justify-center p-2 rounded-xl border border-emerald-900 bg-black bg-opacity-20 relative">
-                        <div className="absolute top-2 text-[9px] font-mono tracking-wide text-emerald-400 text-center max-w-full px-2 truncate">
-                            {hudLog}
+                    <div className="flex flex-col items-center justify-center flex-grow">
+                        <div className="text-center text-[11px] mb-3 text-emerald-400 font-mono max-w-xs h-6 flex items-center justify-center tracking-wide">
+                            {logs}
                         </div>
                         
-                        <div className="flex space-x-1 justify-center items-center min-h-[75px] w-full mt-4">
+                        <div className="flex space-x-1 bg-black bg-opacity-60 p-4 rounded-xl min-w-[240px] justify-center min-h-[100px] border border-emerald-950">
                             {table.length === 0 ? (
-                                <span className="text-emerald-800 font-mono text-[10px] tracking-widest uppercase animate-pulse">CLEARED FIELD</span>
+                                <span className="text-emerald-950 font-mono text-xs self-center tracking-widest animate-pulse">MATRIX EMPTY</span>
                             ) : (
-                                table.map((card, idx) => (
-                                    <div key={idx} className={`bg-white rounded shadow-md w-9 h-13 flex flex-col items-center justify-center text-sm font-black ${card.isRed ? 'text-red-600' : 'text-black'}`}>
-                                        {card.label}
+                                table.map((c, i) => (
+                                    <div key={i} className={`bg-gray-100 rounded w-10 h-14 flex flex-col items-center justify-center text-base font-black ${c.isRed ? 'text-red-600' : 'text-black'}`}>
+                                        {c.label}
                                     </div>
                                 ))
                             )}
                         </div>
                     </div>
 
-                    {/* Interactive Command Center */}
-                    <div className={`mt-2 p-2 rounded-xl border transition-all ${turn === 0 ? 'border-emerald-500 bg-emerald-950 bg-opacity-20' : 'border-emerald-950 bg-black opacity-30'}`}>
-                        <div className="flex justify-between items-center px-1 font-mono text-[9px]">
-                            <span className="text-emerald-600">HAND CARDS [{hands[0].length}]</span>
-                            {turn === 0 && <span className="text-emerald-400 font-bold tracking-wider animate-pulse">● YOUR ACTION TURN</span>}
+                    <div className={`flex flex-col space-y-2 p-3 rounded-xl border ${turn === 0 ? 'border-emerald-500 bg-emerald-950 bg-opacity-10' : 'border-gray-900 bg-black opacity-40'}`}>
+                        <div className="flex justify-between items-center px-1 font-mono text-[10px]">
+                            <span className="text-gray-500">USER HAND DECK [{hands[0] ? hands[0].length : 0}]</span>
+                            {turn === 0 && <span className="text-emerald-400 font-bold tracking-wider animate-pulse">▲ YOUR TURN</span>}
                         </div>
                         
-                        {/* Scrollable Node Field */}
-                        <div className="flex overflow-x-auto hide-scroll space-x-1 py-2 px-1 my-1">
-                            {hands[0].map((card, idx) => {
-                                const targetSelected = selectedCards.includes(card);
-                                const currentFocus = interactiveZone === 'HAND' && focusedCardIdx === idx && turn === 0;
+                        <div ref={cardContainerRef} className="flex overflow-x-auto hide-scroll space-x-1.5 py-3 px-2">
+                            {hands[0] && hands[0].map((c, i) => {
+                                const isSelected = selectedCards.includes(c);
+                                const isFocused = focusZone === 'HAND' && focusedCardIdx === i && turn === 0;
                                 return (
                                     <button 
-                                        id={`card-node-${idx}`}
-                                        key={idx} 
-                                        onClick={() => { if(turn===0){ setInteractiveZone('HAND'); setFocusedCardIdx(idx); toggleCardNode(card); }}}
-                                        className={`flex-shrink-0 w-9 h-13 rounded bg-white flex items-center justify-center text-sm font-black border-2 transition-all duration-75
-                                            ${card.isRed ? 'text-red-600' : 'text-black'}
-                                            ${targetSelected ? 'card-selected' : 'border-transparent'}
-                                            ${currentFocus ? 'ring-4 ring-amber-400 scale-105 z-10' : ''}
+                                        id={`card-${i}`}
+                                        key={i} 
+                                        onClick={() => { if(turn===0){ setFocusZone('HAND'); setFocusedCardIdx(i); toggleCard(c); }}}
+                                        className={`flex-shrink-0 w-11 h-15 rounded bg-gray-50 flex items-center justify-center text-lg font-black border-2 transition-all duration-150
+                                            ${c.isRed ? 'text-red-600' : 'text-black'}
+                                            ${isSelected ? 'card-selected' : 'border-transparent'}
+                                            ${isFocused ? 'ring-4 ring-amber-400 border-white scale-110 z-10 shadow-lg' : ''}
                                         `}
                                     >
-                                        {card.label}
+                                        {c.label}
                                     </button>
                                 );
                             })}
                         </div>
 
-                        {/* Operational Trigger Inputs */}
-                        <div className="flex space-x-2 font-mono mt-1">
+                        <div className="flex space-x-2 font-mono">
                             <button 
-                                onClick={executeUserPass}
+                                onClick={handlePass}
                                 disabled={turn !== 0}
-                                className={`flex-1 border py-1.5 rounded text-[10px] font-bold tracking-widest transition-all
-                                    ${interactiveZone === 'CONTROLS' && focusedActionIdx === 0 && turn === 0 ? 'bg-amber-400 text-black border-white ring-2 ring-amber-300 font-black' : 'bg-black text-emerald-500 border-emerald-900'}
+                                className={`flex-1 border py-2 rounded text-xs font-bold tracking-widest transition-all duration-150
+                                    ${focusZone === 'BUTTONS' && focusedBtnIdx === 0 && turn === 0 ? 'bg-amber-400 text-black border-white ring-4 ring-amber-300' : 'bg-black text-gray-400 border-gray-800'}
                                 `}
                             >
                                 PASS
                             </button>
                             <button 
-                                onClick={executeUserPlay}
+                                onClick={handlePlay}
                                 disabled={turn !== 0 || selectedCards.length === 0}
-                                className={`flex-1 border py-1.5 rounded text-[10px] font-bold tracking-widest transition-all
-                                    ${interactiveZone === 'CONTROLS' && focusedActionIdx === 1 && turn === 0 ? 'bg-emerald-400 text-black border-white ring-2 ring-emerald-300 font-black' : 'bg-emerald-900 text-white border-emerald-700 disabled:opacity-20'}
+                                className={`flex-2 border py-2 px-4 rounded text-xs font-bold tracking-widest transition-all duration-150
+                                    ${focusZone === 'BUTTONS' && focusedBtnIdx === 1 && turn === 0 ? 'bg-emerald-500 text-black border-white ring-4 ring-emerald-300' : 'bg-emerald-800 text-white border-emerald-600 disabled:opacity-20'}
                                 `}
                             >
                                 PLAY ({selectedCards.length})
@@ -543,15 +516,14 @@
                         </div>
                     </div>
 
-                    {/* Execution Stop Window */}
                     {gameState === 'GAMEOVER' && (
-                        <div className="absolute inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center space-y-4 z-50 p-4">
-                            <div className="text-xl font-mono font-bold text-center tracking-wide text-emerald-400 uppercase">{hudLog}</div>
+                        <div className="absolute inset-0 bg-black bg-opacity-95 flex flex-col items-center justify-center space-y-6 z-50">
+                            <div className="text-3xl font-mono font-bold text-center tracking-wide text-emerald-400">{logs}</div>
                             <button 
                                 onClick={() => setGameState('MENU')} 
-                                className="bg-emerald-950 text-emerald-400 font-mono border border-emerald-500 px-4 py-2 rounded text-xs tracking-widest ring-4 ring-emerald-400 animate-pulse"
+                                className="bg-black text-emerald-400 font-mono border border-emerald-500 px-6 py-3 rounded text-sm tracking-widest ring-4 ring-emerald-400"
                             >
-                                ENTER TO REBOOT HUD
+                                PRESS ENTER TO REBOOT
                             </button>
                         </div>
                     )}

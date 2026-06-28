@@ -270,11 +270,13 @@
                     setTable(playedCards);
                     setLastPlayedTurn(playerIdx);
                     
-                    const newHands = [...hands];
-                    newHands[playerIdx] = newHands[playerIdx].filter(c => !playedCards.includes(c));
-                    setHands(newHands);
+                    // Immutably filter cards without in-place mutation hazards
+                    setHands(prevHands => prevHands.map((hand, idx) => 
+                        idx === playerIdx ? hand.filter(c => !playedCards.includes(c)) : hand
+                    ));
 
-                    if (newHands[playerIdx].length === 0) {
+                    // Predict game over state using updated counts safely
+                    if (hands[playerIdx].length - playedCards.length === 0) {
                         setGameState('GAMEOVER');
                         setLogs(playerIdx === 0 ? "🏆 YOU WIN!" : `💀 AI ${playerIdx} WINS!`);
                         return;
@@ -513,7 +515,7 @@
                             <button 
                                 onClick={handlePlay}
                                 disabled={turn !== 0 || selectedCards.length === 0}
-                                className={`flex-2 border py-2 px-4 rounded text-xs font-bold tracking-widest transition-all duration-150
+                                className={`grow-[2] border py-2 px-4 rounded text-xs font-bold tracking-widest transition-all duration-150
                                     ${focusZone === 'BUTTONS' && focusedBtnIdx === 1 && turn === 0 ? 'bg-emerald-500 text-black border-white ring-4 ring-emerald-300' : 'bg-emerald-800 text-white border-emerald-600 disabled:opacity-20'}
                                 `}
                             >

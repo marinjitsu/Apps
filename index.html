@@ -420,8 +420,8 @@
             if (gameState === 'MENU') {
                 return (
                     <div id="mrbd-viewport" className="items-center justify-center space-y-6">
-                        <h1 className="text-4xl font-bold text-emerald-400 tracking-wider text-center">PUSOY DOS <span className="block text-xs font-mono mt-1 text-white opacity-80">HUD D-PAD CORE EXTENSION</span></h1>
-                        <p className="text-gray-400 text-[10px] font-mono tracking-widest text-center">SWIPE UP/DOWN TO NAVIGATE // ENTER TO LOAD</p>
+                        <h1 className="text-4xl font-bold text-emerald-400 tracking-wider text-center">PUSOY DOS <span className="block text-xs font-mono mt-1 text-white opacity-80">another app by MarinJitsu studios</span></h1>
+                        <p className="text-gray-400 text-[10px] font-mono tracking-widest text-center">CHOOSE DIFFICULTY</p>
                         <div className="flex flex-col space-y-3 w-64">
                             {['EASY', 'NORMAL', 'TIRADOR'].map((diff, idx) => {
                                 const isFocused = menuFocus === idx;
@@ -445,7 +445,7 @@
             return (
                 <div id="mrbd-viewport" className="justify-between p-4 relative">
                     <div className="absolute top-2 left-2 text-[9px] font-mono text-emerald-500 bg-black bg-opacity-80 px-2 py-0.5 rounded border border-emerald-900">
-                        LINK ACTIVE // VOLT OVERLAY // MODE: {difficulty}
+                        MODE: {difficulty}
                     </div>
 
                     <div className="flex justify-between items-start mt-6">
